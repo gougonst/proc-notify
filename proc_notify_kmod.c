@@ -4,15 +4,43 @@
 #include <linux/sched/signal.h>
 #include <linux/timer.h>
 #include <linux/netlink.h>
+#include <linux/skbuff.h>
+#include <net/sock.h>
 
-#define NETLINK_USER 31
+#define MYPROTO NETLINK_USERSOCK
 #define NETLINK_GROUP_1 1
-#define NETLINK_GROUP_2 2
+#define NETLINK_GROUP_2 17
 
-extern struct net init_net;
+struct timer_list proc_monitor_timer;
+struct sock *nl_sk = NULL;
 
-static struct timer_list proc_monitor_timer;
-static struct sock *nl_sk = NULL;
+static void send_netlink_message(int group, char *message) {
+    struct sk_buff *skb;
+    struct nlmsghdr *nlh;
+    int msg_size;
+    int result;
+    
+    msg_size = strlen(message) + 1;
+    
+    skb = nlmsg_new(msg_size, 0);
+    if (!skb) {
+        printk(KERN_ALERT "Error creating skb.\n");
+        return;
+    }
+    nlh = nlmsg_put(skb, 0, 0, NLMSG_DONE, msg_size,  0);
+    strncpy(nlmsg_data(nlh), message, msg_size);
+    
+    result = nlmsg_multicast(nl_sk, skb, 0, NETLINK_GROUP_2, GFP_KERNEL);
+    if (result < 0) 
+        printk(KERN_ALERT "Error sending to group %d: %d.\n", group, result);
+}
+
+static const char *add_counter(void) {
+    static int counter = 0;
+    static char string_counter[10];
+    sprintf(string_counter, "%d", counter++);
+    return string_counter;
+}
 
 static void proc_monitor_timer_callback(struct timer_list *timer) {
     struct task_struct *process;
@@ -22,28 +50,9 @@ static void proc_monitor_timer_callback(struct timer_list *timer) {
             printk(KERN_INFO "process: %s, state: %u\n", process->comm, process->__state);
     }
 
-    mod_timer(&proc_monitor_timer, jiffies + msecs_to_jiffies(5000));
-}
+    send_netlink_message(NETLINK_GROUP_2, add_counter());
 
-static void send_netlink_message(int group, const char *message) {
-    struct sk_buff *skb;
-    struct nlmsghdr *nlh;
-    int msg_size;
-    int result;
-    
-    msg_size = strlen(message) + 1;
-    
-    skb = nlmsg_new(NLMSG_DEFAULT_SIZE, 0);
-    if (!skb) {
-        printk(KERN_ALERT "Error creating skb.\n");
-        return;
-    }
-    nlh = nlmsg_put(skb, 0, 0, NLMSG_DONE, msg_size,  0);
-    strncpy(nlmsg_data(nlh), message, msg_size);
-    
-    result = nlmsg_multicast(nl_sk, skb, 0, group, GFP_KERNEL);
-    if (result < 0) 
-        printk(KERN_ALERT "Error sending to group %d: %d.\n", group, result);
+    mod_timer(&proc_monitor_timer, jiffies + msecs_to_jiffies(5000));
 }
 
 static int __init pn_module_init(void) {
@@ -53,9 +62,10 @@ static int __init pn_module_init(void) {
 
     printk(KERN_INFO "Hello, proc_notify\n");
 
-    nl_sk = netlink_kernel_create(&init_net, NETLINK_USER, &cfg);
+    nl_sk = netlink_kernel_create(&init_net, MYPROTO, &cfg);
     if (!nl_sk) {
         printk(KERN_ALERT "Error creating socket.\n");
+        netlink_kernel_release(nl_sk);
         return -10;
     }
 
@@ -67,6 +77,7 @@ static int __init pn_module_init(void) {
 
 static void __exit pn_module_exit(void) {
     printk(KERN_INFO "Goodbye, proc_notify\n");
+    netlink_kernel_release(nl_sk);
     del_timer(&proc_monitor_timer);
 }
 
