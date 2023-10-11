@@ -62,7 +62,7 @@ static void proc_monitor_timer_callback(struct timer_list *timer) {
 
     send_netlink_message(NETLINK_GROUP_2, add_counter());
 
-    mod_timer(&proc_monitor_timer, jiffies + msecs_to_jiffies(5000));
+    mod_timer(&proc_monitor_timer, jiffies + msecs_to_jiffies(10000));
 }
 
 static int __init pn_module_init(void) {
