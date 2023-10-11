@@ -37,6 +37,44 @@ void read_message(int sock) {
     printf("Received message: %s\n", payload);
 }
 
+void send_kernel_message(int sock, char *message) {
+    struct sockaddr_nl dest_addr;
+    struct nlmsghdr *nlh;
+    struct msghdr msg;
+    struct iovec iov;
+    int ret;
+    int message_size = strlen(message) + 1;
+
+    memset(&dest_addr, 0, sizeof(dest_addr));
+    dest_addr.nl_family = AF_NETLINK;
+    dest_addr.nl_pid = getpid();
+
+    nlh = (struct nlmsghdr *)malloc(NLMSG_SPACE(message_size));
+    nlh->nlmsg_len = NLMSG_SPACE(message_size);
+    nlh->nlmsg_pid = getpid();
+    nlh->nlmsg_flags = 0;
+    strncpy(NLMSG_DATA(nlh), message, message_size);
+
+    memset(&iov, 0, sizeof(iov));
+    iov.iov_base = (void *)nlh;
+    iov.iov_len = nlh->nlmsg_len;
+
+    memset(&msg, 0, sizeof(msg));
+    msg.msg_name = (void *)&dest_addr;
+    msg.msg_namelen = sizeof(dest_addr);
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+
+    printf("Sending...");
+    ret = sendmsg(sock, &msg, 0);
+    if (ret < 0) {
+        printf("Error sending message: %s\n", strerror(errno));
+        close(sock);
+        return;
+    }
+    printf("Send message: \'%s\' to kernel.\n", message);
+}
+
 int main() {
     struct sockaddr_nl src_addr;
     int sock_fd;
