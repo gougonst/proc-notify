@@ -14,7 +14,7 @@
 struct timer_list proc_monitor_timer;
 struct sock *nl_sk = NULL;
 
-static void send_netlink_message(int group, char *message) {
+static void send_netlink_message(int group, const char *message) {
     struct sk_buff *skb;
     struct nlmsghdr *nlh;
     int msg_size;
@@ -33,6 +33,16 @@ static void send_netlink_message(int group, char *message) {
     result = nlmsg_multicast(nl_sk, skb, 0, NETLINK_GROUP_2, GFP_KERNEL);
     if (result < 0) 
         printk(KERN_ALERT "Error sending to group %d: %d.\n", group, result);
+}
+
+static void recv_netlink_message(struct sk_buff *skb) {
+    struct nlmsghdr *nlh;
+    char *message;
+
+    nlh = (struct nlmsghdr *)skb->data;
+    message = (char *)NLMSG_DATA(nlh);
+
+    printk(KERN_INFO "Received message from user: %s\n", message);
 }
 
 static const char *add_counter(void) {
@@ -57,7 +67,7 @@ static void proc_monitor_timer_callback(struct timer_list *timer) {
 
 static int __init pn_module_init(void) {
     struct netlink_kernel_cfg cfg = {
-        .input = NULL, 
+        .input = recv_netlink_message, 
     };
 
     printk(KERN_INFO "Hello, proc_notify\n");

@@ -47,7 +47,7 @@ void send_kernel_message(int sock, char *message) {
 
     memset(&dest_addr, 0, sizeof(dest_addr));
     dest_addr.nl_family = AF_NETLINK;
-    dest_addr.nl_pid = getpid();
+    dest_addr.nl_pid = 0;
 
     nlh = (struct nlmsghdr *)malloc(NLMSG_SPACE(message_size));
     nlh->nlmsg_len = NLMSG_SPACE(message_size);
@@ -65,7 +65,7 @@ void send_kernel_message(int sock, char *message) {
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
 
-    printf("Sending...");
+    printf("Sending...\n");
     ret = sendmsg(sock, &msg, 0);
     if (ret < 0) {
         printf("Error sending message: %s\n", strerror(errno));
@@ -96,6 +96,8 @@ int main() {
         close(sock_fd);
         return -1;
     }
+
+    send_kernel_message(sock_fd, "Hello from user space!");
 
     while (1) 
         read_message(sock_fd);
